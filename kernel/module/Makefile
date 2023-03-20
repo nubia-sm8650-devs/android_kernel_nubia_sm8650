@@ -3,6 +3,8 @@
 # Makefile for linux kernel module support
 #
 
+ccflags-y := -DCONFIG_MODULES=1
+
 # These are called from save_stack_trace() on slub debug path,
 # and produce insane amounts of uninteresting coverage.
 KCOV_INSTRUMENT_module.o := n
@@ -16,7 +18,9 @@ obj-$(CONFIG_MODULES_TREE_LOOKUP) += tree_lookup.o
 obj-$(CONFIG_DEBUG_KMEMLEAK) += debug_kmemleak.o
 obj-$(CONFIG_KALLSYMS) += kallsyms.o
 obj-$(CONFIG_PROC_FS) += procfs.o
+ifneq ($(CONFIG_INTEGRATE_MODULES),y)
 obj-$(CONFIG_SYSFS) += sysfs.o
+endif
 obj-$(CONFIG_KGDB_KDB) += kdb.o
 obj-$(CONFIG_MODVERSIONS) += version.o
 obj-$(CONFIG_MODULE_UNLOAD_TAINT_TRACKING) += tracking.o
