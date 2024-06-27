@@ -87,6 +87,7 @@ def _define_build_config(
             "build.config.aarch64",
             ":{}_build_config_bazel".format(target),
         ] + [fragment for fragment in build_config_fragments] + [
+            "build.config.oemspec",
             "build.config.msm.common",
             "build.config.msm.gki",
         ],

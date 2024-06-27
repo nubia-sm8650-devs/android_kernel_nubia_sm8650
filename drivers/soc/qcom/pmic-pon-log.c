@@ -12,6 +12,9 @@
 #include <linux/platform_device.h>
 #include <linux/string.h>
 
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+#include <vendor/comdef/zlog_common_base.h>
+#endif
 /* SDAM NVMEM register offsets: */
 #define REG_SDAM_COUNT		0x45
 #define REG_PUSH_PTR		0x46
@@ -299,6 +302,94 @@ static int pmic_pon_log_print_reason(char *buf, int buf_size, u8 data,
 
 #define BUF_SIZE 128
 
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+static struct delayed_work		zlog_bootmode_work;
+static struct zlog_client *zlog_bootmode_client = NULL;
+static struct zlog_mod_info zlog_bootmode_dev = {
+	.module_no = ZLOG_MODULE_CHG,
+	.name = "PMU",
+	.device_name = "qcom_pmu",
+	.ic_name = "pmu8450",
+	.module_name = "QCOM",
+	.fops = NULL,
+};
+static int bootmode_err_no = 0;
+
+static void zte_log_bootmode(char *log_buf)
+{
+	if (!zlog_bootmode_client) {
+		pr_err("%s zlog register client zlog_bootmode_dev fail2\n", __func__);
+		return;
+	}
+	pr_info("enter %s!\n", __func__);
+	zlog_client_record(zlog_bootmode_client, "  %s\n", log_buf);
+	/*zlog_client_notify(zlog_bootmode_client, ZLOG_CHG_BOOTMODE_NO);*/
+
+	if(strnstr(log_buf,"OVLO",BUF_SIZE))
+		bootmode_err_no = ZLOG_CHG_BOOTMODE_OVLO;
+
+	if(strnstr(log_buf,"SMPL",BUF_SIZE))
+		bootmode_err_no = ZLOG_CHG_BOOTMODE_SMPL;
+
+	if(strnstr(log_buf,"OCP",BUF_SIZE))
+		bootmode_err_no = ZLOG_CHG_BOOTMODE_OCP;
+
+	if(strnstr(log_buf,"KPDPWR_N_S2",BUF_SIZE))
+		bootmode_err_no = ZLOG_CHG_BOOTMODE_S2_TIMEOUT;
+
+	if(strnstr(log_buf,"S3_RESET_REASON",BUF_SIZE))
+		bootmode_err_no = ZLOG_CHG_BOOTMODE_S3_TIMEOUT;
+}
+
+static void zte_log_bootmode_exception(int err_no)
+{
+	if (!zlog_bootmode_client) {
+		pr_err("%s zlog register client zlog_bootmode_dev fail2\n", __func__);
+		return;
+	}
+	pr_info("enter %s,err_no=%d!\n", __func__,err_no);
+
+	switch(err_no)
+	{
+		case  ZLOG_CHG_BOOTMODE_OVLO:
+			zlog_client_record(zlog_bootmode_client, "zte_log_bootmode_exception = OVLO");
+			zlog_client_notify(zlog_bootmode_client, ZLOG_CHG_BOOTMODE_OVLO);
+		break;
+		case  ZLOG_CHG_BOOTMODE_SMPL:
+			zlog_client_record(zlog_bootmode_client, "zte_log_bootmode_exception = SMPL");
+			zlog_client_notify(zlog_bootmode_client, ZLOG_CHG_BOOTMODE_SMPL);
+		break;
+		case  ZLOG_CHG_BOOTMODE_OCP:
+			zlog_client_record(zlog_bootmode_client, "zte_log_bootmode_exception = OCP");
+			zlog_client_notify(zlog_bootmode_client, ZLOG_CHG_BOOTMODE_OCP);
+		break;
+		case  ZLOG_CHG_BOOTMODE_S2_TIMEOUT:
+			zlog_client_record(zlog_bootmode_client, "zte_log_bootmode_exception = KPDPWR_N_S2");
+			zlog_client_notify(zlog_bootmode_client, ZLOG_CHG_BOOTMODE_S2_TIMEOUT);
+		break;
+            	case  ZLOG_CHG_BOOTMODE_S3_TIMEOUT:
+			zlog_client_record(zlog_bootmode_client, "zte_log_bootmode_exception = S3_RESET_REASON");
+			zlog_client_notify(zlog_bootmode_client, ZLOG_CHG_BOOTMODE_S3_TIMEOUT);
+		break;
+		default:
+			return;
+	}
+
+}
+
+
+static void zte_zlog_bootmode_work(struct work_struct *work)
+{
+	if (!zlog_bootmode_client) {
+		pr_err("%s zlog register client zlog_bootmode_dev failed\n", __func__);
+		return;
+	}
+
+	zlog_client_notify(zlog_bootmode_client, ZLOG_CHG_BOOTMODE_NO);
+	zte_log_bootmode_exception(bootmode_err_no);
+}
+#endif
+
 static int pmic_pon_log_parse_entry(const struct pmic_pon_log_entry *entry,
 		void *ipc_log)
 {
@@ -477,7 +568,12 @@ static int pmic_pon_log_parse_entry(const struct pmic_pon_log_entry *entry,
 	}
 
 	if (is_important)
+	{
 		pr_info("PMIC PON log: %s\n", buf);
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+		zte_log_bootmode(buf);
+#endif
+	}
 	else
 		pr_debug("PMIC PON log: %s\n", buf);
 
@@ -712,6 +808,12 @@ static int pmic_pon_log_probe(struct platform_device *pdev)
 	pon_dev->ipc_log = ipc_log_context_create(IPC_LOG_PAGES, "pmic_pon", 0);
 	platform_set_drvdata(pdev, pon_dev);
 
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+	zlog_bootmode_client = zlog_register_client(&zlog_bootmode_dev);
+	if (!zlog_bootmode_client) {
+		dev_err(&pdev->dev, "zlog register client zlog_bootmode_dev fail\n");
+	}
+#endif
 	ret = pmic_pon_log_parse(pon_dev);
 	if (ret < 0)
 		dev_err(&pdev->dev, "PMIC PON log parsing failed, ret=%d\n",
@@ -719,6 +821,10 @@ static int pmic_pon_log_probe(struct platform_device *pdev)
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,pmic-fault-panic"))
 		pmic_pon_log_fault_panic(pon_dev);
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+	INIT_DELAYED_WORK(&zlog_bootmode_work, zte_zlog_bootmode_work);
+	schedule_delayed_work(&zlog_bootmode_work, msecs_to_jiffies(30000));
+#endif
 
 	return ret;
 }

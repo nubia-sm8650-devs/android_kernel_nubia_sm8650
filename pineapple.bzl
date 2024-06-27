@@ -287,6 +287,42 @@ def define_pineapple():
         "lib/test_user_copy.ko",
     ]
 
+    _pineapple_common_oem_modules = [
+        "drivers/vendor/common/touchscreen_v2/zte_tpd.ko",
+        "drivers/input/fingerprint/goodix/zte_fingerprint.ko",
+        "drivers/vendor/soc/qcom/imem_info/zte_imem_info.ko",
+        "drivers/vendor/soc/qcom/kmparam/kmparam.ko",
+        "drivers/leds/aw22xxx/zte_led.ko",
+        "drivers/misc/haptic_hv/haptic.ko",
+        "drivers/vendor/common/power/charger_policy/charger_policy_service.ko",
+        "drivers/vendor/common/power/misc/zte_misc.ko",
+        "drivers/vendor/common/power/zte_supply/zte_power_supply.ko",
+        "drivers/vendor/soc/qcom/pmlog/pm_debug.ko",
+        "drivers/vendor/soc/qcom/stats_info/zte_stats_info.ko",
+        "drivers/nubia/sensors_sensitivity/zte_sensor.ko",
+        "drivers/media/rc/zte_ir.ko",
+        "drivers/nfc/st54j/st54jnfc.ko",
+        "drivers/nfc/st54j/st54jese.ko",
+        "drivers/block/zram/zram.ko",
+        "mm/zsmalloc.ko",
+        "kernel/trace/msm_rtb.ko",
+    ]
+
+    _tiro_in_tree_modules = [
+       "drivers/vendor/common/fan/soc_fan.ko",
+       "drivers/vendor/common/nubia_hw_version/nubia_hw_version.ko",
+       "drivers/vendor/common/aw96205/aw9620x.ko",
+    ]
+
+    _cerro_in_tree_modules = [
+       "drivers/input/hall/ah1898_hall.ko",
+    ]
+
+    _zlog_in_tree_modules = [
+       "drivers/vendor/common/zlog/zlog_common/zlog_common_dlkm.ko",
+       "drivers/vendor/common/zlog/zlog_exception/zlog_exception_dlkm.ko",
+       "drivers/vendor/common/zlog/zlog_test/zlog_test_dlkm.ko",
+    ]
     kernel_vendor_cmdline_extras = [
         # do not sort
         "console=ttyMSM0,115200n8",
@@ -302,9 +338,19 @@ def define_pineapple():
             mod_list = _pineapple_consolidate_in_tree_modules
         else:
             mod_list = _pineapple_in_tree_modules
-            board_kernel_cmdline_extras += ["nosoftlockup"]
-            kernel_vendor_cmdline_extras += ["nosoftlockup"]
-            board_bootconfig_extras += ["androidboot.console=0"]
+
+        mod_list += _pineapple_common_oem_modules
+        if ZTE_BOARD_NAME == "tiro":
+            mod_list += _tiro_in_tree_modules
+        elif ZTE_BOARD_NAME == "cerro":
+            mod_list += _cerro_in_tree_modules
+
+        if ZTE_FEATURE_ZTE_LOG_EXCEPTION == "true":
+            mod_list += _zlog_in_tree_modules
+
+        board_kernel_cmdline_extras += ["nosoftlockup"]
+        kernel_vendor_cmdline_extras += ["nosoftlockup"]
+        board_bootconfig_extras += ["androidboot.console=0"]
 
         define_msm_la(
             msm_target = target_name,

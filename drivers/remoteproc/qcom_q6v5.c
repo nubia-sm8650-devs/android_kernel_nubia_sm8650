@@ -19,7 +19,24 @@
 #include "qcom_q6v5.h"
 #include <trace/events/rproc_qcom.h>
 
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+#include <linux/string.h>
+#include "zlog_common.h"
+#endif
+
 #define Q6V5_PANIC_DELAY_MS	200
+
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+static struct zlog_client *zlog_q6v5_client = NULL;
+static struct zlog_mod_info zlog_q6v5_dev = {
+	.module_no = ZLOG_MODULE_SUBSYS,
+	.name = "Q6V5",
+	.device_name = "Q6V5",
+	.ic_name = "Q6V5",
+	.module_name = "subsys",
+	.fops = NULL,
+};
+#endif
 
 /**
  * qcom_q6v5_prepare() - reinitialize the qcom_q6v5 context before start
@@ -111,6 +128,17 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "watchdog received: %s\n", msg);
 		trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_wdog", msg);
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+		if (zlog_q6v5_client) {
+			if (q6v5->rproc && q6v5->rproc->name &&
+					strstr(q6v5->rproc->name, "remoteproc-mss")) {
+				zlog_client_record(zlog_q6v5_client, "watchdog received: %s\n", msg);
+				zlog_client_notify(zlog_q6v5_client, ZLOG_SUBSYS_MODEM_CRASH_ERROR_NO);
+			}
+		} else {
+			dev_err(q6v5->dev, "can't report subsys watchdog info to zlog\n");
+		}
+#endif
 	} else {
 		dev_err(q6v5->dev, "watchdog without message\n");
 	}
@@ -148,6 +176,17 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "fatal error received: %s\n", msg);
 		trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_fatal", msg);
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+		if (zlog_q6v5_client) {
+			if (q6v5->rproc && q6v5->rproc->name &&
+					strstr(q6v5->rproc->name, "remoteproc-mss")) {
+				zlog_client_record(zlog_q6v5_client, "fatal error received: %s\n", msg);
+				zlog_client_notify(zlog_q6v5_client, ZLOG_SUBSYS_MODEM_CRASH_ERROR_NO);
+			}
+		} else {
+			dev_err(q6v5->dev, "can't report subsys fatal error info to zlog\n");
+		}
+#endif
 	} else {
 		dev_err(q6v5->dev, "fatal error without message\n");
 	}
@@ -327,6 +366,13 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 		dev_err(&pdev->dev, "failed to acquire fatal IRQ\n");
 		return ret;
 	}
+
+#ifdef CONFIG_VENDOR_ZTE_DEV_MONITOR_SYSTEM
+	zlog_q6v5_client = zlog_register_client(&zlog_q6v5_dev);
+	if (!zlog_q6v5_client) {
+		dev_err(q6v5->dev, "zlog failed to register client for q6v5\n");
+	}
+#endif
 
 	q6v5->ready_irq = platform_get_irq_byname(pdev, "ready");
 	if (q6v5->ready_irq < 0)

@@ -930,7 +930,11 @@ config BATTERY_UG3105
 	  Since Linux does not monitor coulomb-counter changes while the
 	  device is off or suspended, the functionality of this driver is
 	  limited to reporting capacity only.
-
+config ZTE_FEATURE_CHG_BATT_2S
+        bool "nubia dp"
+        default n
+        help
+          zte feature chg batt 2s
 source "drivers/power/supply/qcom/Kconfig"
 
 endif # POWER_SUPPLY

@@ -23,6 +23,8 @@
 #include <soc/qcom/qcom_stats.h>
 #include <clocksource/arm_arch_timer.h>
 
+#include <trace/events/power.h>
+
 #define RPM_DYNAMIC_ADDR	0x14
 #define RPM_DYNAMIC_ADDR_MASK	0xFFFF
 
@@ -93,6 +95,8 @@
 #define DDR_STATS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 13, \
 				     struct sleep_stats *)
 
+#define ZTE_RECORD_NUM		20
+
 struct subsystem_data {
 	const char *name;
 	u32 smem_item;
@@ -115,6 +119,27 @@ static struct subsystem_data subsystems[] = {
 	{ "slpi_island", 613, 3 },
 	{ "apss", 631, QCOM_SMEM_HOST_ANY },
 };
+
+struct soc_subsystem_data {
+	const char *name;
+	void __iomem *base;
+};
+
+static struct soc_subsystem_data soc_aosd[] = {
+	{ "aosd"}
+};
+
+static struct soc_subsystem_data soc_cxsd[] = {
+	{ "cxsd"}
+};
+
+struct subsystem_data_zte {
+struct subsystem_data ss_data;
+	u32 used;
+};
+
+static struct subsystem_data_zte subsystems_zte[ZTE_RECORD_NUM] = {};
+
 
 struct stats_config {
 	size_t stats_offset;
@@ -872,6 +897,63 @@ static int qcom_create_stats_device(struct stats_drvdata *drv)
 
 	return ret;
 }
+static void print_sleep_stats_zte(const char* name ,struct sleep_stats *stat)
+{
+	u64 accumulated = stat->accumulated;
+	/*
+	 * If a subsystem is in sleep when reading the sleep stats adjust
+	 * the accumulated sleep duration to show actual sleep time.
+	 */
+	if (stat->last_entered_at > stat->last_exited_at)
+		accumulated += arch_timer_read_counter()
+			       - stat->last_entered_at;
+
+	pr_info("%s  Count = %u  Last Entered At = %llu  Last Exited At = %llu  Accumulated Duration = %llu  \n", name, stat->count, stat->last_entered_at, stat->last_exited_at, accumulated);
+}
+void pm_show_rpmh_master_stats(void)
+{
+	int j = 0;
+
+		for (j = 0; j < ARRAY_SIZE(subsystems_zte); j++) {
+			if (1 == subsystems_zte[j].used) {
+
+				struct subsystem_data *subsystem = &(subsystems_zte[j].ss_data);
+				struct sleep_stats *stat;
+
+				stat = qcom_smem_get(subsystem->pid, subsystem->smem_item, NULL);
+				if (IS_ERR(stat))
+					return ;
+				print_sleep_stats_zte(subsystem->name, stat);
+			}
+		}
+}
+
+
+static unsigned long long vmin_count = 0;
+
+
+extern void debug_suspend_enabled(void);
+
+extern void debug_suspend_disable(void);
+void pm_show_rpm_stats(void)
+{
+
+    unsigned long long count = 0;
+ 	void __iomem *reg = soc_aosd[0].base;
+ 	struct sleep_stats stat;
+  
+  	memcpy_fromio(&stat, reg, sizeof(stat));
+	count = stat.count;
+	if (vmin_count != count) {
+		pr_info("count: last %llu now %llu , enter vdd min success\n", vmin_count, count);
+		vmin_count = count;
+		debug_suspend_disable();
+	} else {
+		pr_info("count: last %llu now %llu, enter vdd min failed\n", vmin_count, count);
+		pm_show_rpmh_master_stats();
+		debug_suspend_enabled();
+	}
+}
 
 static void qcom_create_island_stat_files(struct dentry *root, void __iomem *reg,
 					  struct stats_data *d,
@@ -935,6 +1017,12 @@ static void qcom_create_soc_sleep_stat_files(struct dentry *root, void __iomem *
 		get_sleep_stat_name(type, stat_type);
 		debugfs_create_file(stat_type, 0400, root, &d[i],
 				    &qcom_soc_sleep_stats_fops);
+		if( !strcmp(stat_type, "aosd")) {
+			soc_aosd[0].base = d[i].base;
+		}
+		if( !strcmp(stat_type, "cxsd")) {
+			soc_cxsd[0].base = d[i].base;
+		}
 
 		offset += sizeof(struct sleep_stats);
 		if (d[i].appended_stats_avail)
@@ -964,9 +1052,19 @@ static void qcom_create_subsystem_stat_files(struct dentry *root,
 				debugfs_create_file(subsystems[j].name, 0400, root,
 						    (void *)&subsystems[j],
 						    &qcom_subsystem_sleep_stats_fops);
+				//subsystems_zte
+				memcpy(&(subsystems_zte[i].ss_data), &subsystems[j], sizeof(struct subsystem_data));
+				subsystems_zte[i].used =1;
 				break;
 			}
 		}
+	}
+}
+static void debug_suspend_trace_probe(void *unused,
+					const char *action, int val, bool start)
+{
+	if (start && val > 0 && !strcmp("machine_suspend", action)) {
+		pm_show_rpm_stats();
 	}
 }
 
@@ -1055,7 +1153,8 @@ static int qcom_stats_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, drv);
-
+    ret = register_trace_suspend_resume(
+			debug_suspend_trace_probe, NULL);
 	return 0;
 
 fail:
@@ -1115,6 +1214,8 @@ static int qcom_stats_suspend(struct device *dev)
 	return 0;
 }
 
+
+
 static int qcom_stats_resume(struct device *dev)
 {
 	struct stats_drvdata *drv = dev_get_drvdata(dev);
@@ -1122,6 +1223,7 @@ static int qcom_stats_resume(struct device *dev)
 	void __iomem *reg = NULL;
 	int i;
 	u32 stats_id = 0;
+
 
 	if (!subsystem_stats_debug_on)
 		return 0;

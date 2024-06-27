@@ -24,7 +24,7 @@
 
 static struct clk_hw *measure;
 static bool debug_suspend;
-static bool debug_suspend_atomic;
+static bool debug_suspend_atomic = true;
 static bool qcom_clk_debug_inited;
 static struct dentry *clk_debugfs_suspend;
 static struct dentry *clk_debugfs_suspend_atomic;
@@ -52,6 +52,21 @@ static LIST_HEAD(clk_hw_debug_mux_list);
 #define XO_DIV4_TERM_CNT_MASK	GENMASK(19, 0)
 #define MEASURE_CNT		GENMASK(24, 0)
 #define CBCR_ENA		BIT(0)
+/* zte_pm show sleep clk*/
+static int clk_debug_suspend_enable_set(void *data, u64 val);
+void debug_suspend_enabled(void)
+{
+	clk_debug_suspend_enable_set(NULL,1);
+}
+
+EXPORT_SYMBOL(debug_suspend_enabled);
+
+void debug_suspend_disable(void)
+{
+	clk_debug_suspend_enable_set(NULL,0);
+}
+
+EXPORT_SYMBOL(debug_suspend_disable);
 
 static int _clk_runtime_get_debug_mux(struct clk_debug_mux *mux, bool get)
 {
@@ -967,7 +982,7 @@ static const struct file_operations clk_enabled_trace_fops = {
 static void clk_debug_suspend_trace_probe(void *unused,
 					const char *action, int val, bool start)
 {
-	if (start && val > 0 && !strcmp("machine_suspend", action)) {
+	if (debug_suspend && start && val > 0 && !strcmp("machine_suspend", action)) {
 		pr_info("Enabled Clocks:\n");
 		clock_debug_print_enabled_clocks(NULL);
 	}
@@ -982,23 +997,12 @@ static int clk_debug_suspend_enable_get(void *data, u64 *val)
 
 static int clk_debug_suspend_enable_set(void *data, u64 val)
 {
-	int ret;
 
 	val = !!val;
 	if (val == debug_suspend)
 		return 0;
 
-	if (val)
-		ret = register_trace_suspend_resume(
-			clk_debug_suspend_trace_probe, NULL);
-	else
-		ret = unregister_trace_suspend_resume(
-			clk_debug_suspend_trace_probe, NULL);
-	if (ret) {
-		pr_err("%s: Failed to %sregister suspend trace callback, ret=%d\n",
-			__func__, val ? "" : "un", ret);
-		return ret;
-	}
+
 	debug_suspend = val;
 
 	return 0;
@@ -1079,6 +1083,7 @@ int clk_debug_init(void)
 	static struct dentry *rootdir;
 	int ret = 0;
 
+	register_trace_suspend_resume(clk_debug_suspend_trace_probe, NULL);
 	rootdir = debugfs_lookup("clk", NULL);
 	if (IS_ERR_OR_NULL(rootdir)) {
 		ret = PTR_ERR(rootdir);
@@ -1121,8 +1126,7 @@ void clk_debug_exit(void)
 {
 	debugfs_remove(clk_debugfs_suspend);
 	debugfs_remove(clk_debugfs_suspend_atomic);
-	if (debug_suspend)
-		unregister_trace_suspend_resume(
+	unregister_trace_suspend_resume(
 				clk_debug_suspend_trace_probe, NULL);
 
 	clk_debug_unregister();

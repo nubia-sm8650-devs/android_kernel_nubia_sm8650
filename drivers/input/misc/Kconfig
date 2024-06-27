@@ -949,4 +949,10 @@ config INPUT_STPMIC1_ONKEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called stpmic1_onkey.
 
+config VOL_DOWN_RESIN
+    bool "s2 warm reset process"
+    default n
+    help
+      set s2 warm reset resource to s2-kpdpwr-resin
+
 endif

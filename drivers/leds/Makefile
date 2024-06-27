@@ -115,3 +115,6 @@ obj-y					+= blink/
 
 # Simple LED drivers
 obj-y					+= simple/
+
+# for breathing light leds
+obj-y		+= aw22xxx/

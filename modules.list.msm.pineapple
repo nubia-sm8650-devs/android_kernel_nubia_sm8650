@@ -99,3 +99,11 @@ sdhci-msm.ko
 cqhci.ko
 crm.ko
 bcl_pmic5.ko
+zte_imem_info.ko
+nubia_hw_version.ko
+kmparam.ko
+pm_debug.ko
+zte_stats_info.ko
+msm_rtb.ko
+zlog_exception_dlkm.ko
+zlog_common_dlkm.ko

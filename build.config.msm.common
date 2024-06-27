@@ -88,6 +88,24 @@ function merge_defconfig_fragments() {
     echo "No defconfig fragments for ${DEFCONFIG}"
     return
   fi
+
+  file_name=${KERNEL_DIR}/arch/arm64/configs/oem/${PRODUCT_DEVICE}_diff_config
+  if [ -e $file_name ] ; then
+     DEFCONFIG_FRAGMENTS="${DEFCONFIG_FRAGMENTS} $file_name"
+  fi
+
+  file_name=${KERNEL_DIR}/arch/arm64/configs/oem/boards/${ZTE_BOARD_NAME}_diff_config
+  if [ -e $file_name ] ; then
+     DEFCONFIG_FRAGMENTS+=" $file_name"
+  fi
+
+  if [ "$ZTE_FEATURE_ZTE_LOG_EXCEPTION" == "true" ]; then
+    file_name=${KERNEL_DIR}/arch/arm64/configs/oem/zlog_diff_config
+    if [ -e $file_name ] ; then
+       DEFCONFIG_FRAGMENTS+=" $file_name"
+    fi
+  fi
+
   local output=$(mktemp)
   mkdir -p $(dirname ${OUT_DIR}/arch/${ARCH}/configs/${DEFCONFIG})
   KCONFIG_CONFIG=${OUT_DIR}/arch/${ARCH}/configs/${DEFCONFIG} \

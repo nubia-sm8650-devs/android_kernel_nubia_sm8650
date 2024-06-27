@@ -22,6 +22,8 @@
 #include <uapi/linux/sched/types.h>
 
 #include "qrtr.h"
+#include <linux/syscore_ops.h>
+#include <trace/events/power.h>
 
 #define QRTR_LOG_PAGE_CNT 4
 #define QRTR_INFO(ctx, x, ...)				\
@@ -43,6 +45,20 @@
 #define QRTR_STATE_INIT		-1
 
 #define AID_VENDOR_QRTR	KGIDT_INIT(2906)
+/*zte_pm add++*/
+
+bool can_qrtr_output(void);
+#define QRTR_INFO_ZTE(fmt, ...)						  \
+do {									  \
+	if (can_qrtr_output())				  \
+		pr_info(fmt, ##__VA_ARGS__);  \
+} while (0)
+
+/*zte_pm add--*/
+static int msm_pm_debug_mask = 0;
+module_param_named(
+	debug_mask, msm_pm_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
+);
 
 /**
  * struct qrtr_hdr_v1 - (I|R)PCrouter packet header version 1
@@ -232,6 +248,29 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      struct sockaddr_qrtr *to, unsigned int flags);
 static struct qrtr_sock *qrtr_port_lookup(int port);
 static void qrtr_port_put(struct qrtr_sock *ipc);
+static int qrtr_count = 0;
+bool can_qrtr_output(void)
+{
+	if (msm_pm_debug_mask == 1) {
+		return true;
+	}
+	if (qrtr_count > 0) {
+		qrtr_count = qrtr_count - 1;
+		return true;
+	} else {
+		return false;
+	}
+}
+static void qrtr_debug_suspend_trace_probe(void *unused, const char *action, int val, bool start)
+{
+	if (start && val > 0 && !strcmp("machine_suspend", action)) {
+		qrtr_count = 3;
+	}
+
+	if (!start && val > 0 && !strcmp("dpm_resume", action)) {
+		qrtr_count = 0;
+	}
+}
 
 static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 			    struct sk_buff *skb)
@@ -299,27 +338,57 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
 			  cb->dst_node, cb->dst_port,
 			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+
+		QRTR_INFO_ZTE(
+			  "RX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]\n",
+			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
+			  cb->dst_node, cb->dst_port,
+			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+
 	} else {
 		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 		if (cb->type == QRTR_TYPE_NEW_SERVER ||
-		    cb->type == QRTR_TYPE_DEL_SERVER)
+		    cb->type == QRTR_TYPE_DEL_SERVER) {
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
 				  cb->type, le32_to_cpu(pkt.server.service),
 				  le32_to_cpu(pkt.server.instance),
 				  le32_to_cpu(pkt.server.node),
 				  le32_to_cpu(pkt.server.port));
-		else if (cb->type == QRTR_TYPE_DEL_CLIENT ||
-			 cb->type == QRTR_TYPE_RESUME_TX)
+
+
+			QRTR_INFO_ZTE(
+				  "RX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
+				  cb->type, le32_to_cpu(pkt.server.service),
+				  le32_to_cpu(pkt.server.instance),
+				  le32_to_cpu(pkt.server.node),
+				  le32_to_cpu(pkt.server.port));
+
+		} else if (cb->type == QRTR_TYPE_DEL_CLIENT ||
+			 cb->type == QRTR_TYPE_RESUME_TX) {
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x addr[0x%x:0x%x]\n",
 				  cb->type, le32_to_cpu(pkt.client.node),
 				  le32_to_cpu(pkt.client.port));
-		else if (cb->type == QRTR_TYPE_HELLO ||
-			 cb->type == QRTR_TYPE_BYE)
+
+			QRTR_INFO_ZTE(
+				  "RX CTRL: cmd:0x%x addr[0x%x:0x%x]\n",
+				  cb->type, le32_to_cpu(pkt.client.node),
+				  le32_to_cpu(pkt.client.port));
+
+		} else if (cb->type == QRTR_TYPE_HELLO ||
+			cb->type == QRTR_TYPE_BYE) {
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x node[0x%x]\n",
 				  cb->type, cb->src_node);
+			if (cb->src_node == 0 || cb->src_node == 3)
+				pr_err("qrtr: Modem QMI Readiness RX cmd:0x%x node[0x%x]\n",
+				       cb->type, cb->src_node);
+			QRTR_INFO_ZTE(
+				  "RX CTRL: cmd:0x%x node[0x%x]\n",
+				  cb->type, cb->src_node);
+
+		}
 	}
 }
 
@@ -2309,7 +2378,7 @@ static int __init qrtr_proto_init(void)
 		goto err_sock;
 
 	qrtr_backup_init();
-
+	register_trace_suspend_resume(qrtr_debug_suspend_trace_probe, NULL);
 	return 0;
 
 err_sock:

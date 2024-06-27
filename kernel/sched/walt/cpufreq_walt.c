@@ -16,6 +16,9 @@
 #include "walt.h"
 #include "trace.h"
 
+//nubia add for cpu ctrl
+unsigned int nubia_cpufreq_ctrl_value=0;
+//nubia end
 struct waltgov_tunables {
 	struct gov_attr_set	attr_set;
 	unsigned int		up_rate_limit_us;
@@ -309,6 +312,19 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		}
 	}
 
+	if (freq > fmax_cap[SMART_FMAX_CAP][cluster->id]) {
+		freq = fmax_cap[SMART_FMAX_CAP][cluster->id];
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_SMART_FMAX_CAP;
+	}
+	if (freq > fmax_cap[HIGH_PERF_CAP][cluster->id]) {
+		freq = fmax_cap[HIGH_PERF_CAP][cluster->id];
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_HIGH_PERF_CAP;
+	}
+	if (freq > fmax_cap[PARTIAL_HALT_CAP][cluster->id]) {
+		freq = fmax_cap[PARTIAL_HALT_CAP][cluster->id];
+		wg_driv_cpu->reasons |= CPUFREQ_REASON_PARTIAL_HALT_CAP;
+	}
+
 	if (wg_policy->cached_raw_freq && freq == wg_policy->cached_raw_freq &&
 		!wg_policy->need_freq_update) {
 		final_freq = 0;
@@ -323,6 +339,30 @@ static unsigned int get_next_freq(struct waltgov_policy *wg_policy,
 		final_freq = 0;
 		goto out;
 	}
+    //nubia add for cpu ctrl
+    switch (nubia_cpufreq_ctrl_value) {
+        case 1:
+            if(freq > 2000000) {
+                freq = (freq *100 * util)/(98*max);
+            }
+            break;
+        case 2:
+            if(freq > 2323200){
+                freq = 2419200;
+            }
+            break;
+        case 3:
+            if(freq > 2000000) {
+                freq = (freq *100 * util)/(98*max);
+            }
+            if(freq > 2323200){
+                freq = 2419200;
+            }
+            break;
+        default:
+            break;
+    }
+    //nubia end
 out:
 	trace_waltgov_next_freq(policy->cpu, util, max, raw_freq, freq,
 				policy->min, policy->max,
@@ -707,6 +747,19 @@ static ssize_t pl_store(struct gov_attr_set *attr_set, const char *buf,
 	return count;
 }
 
+//nubia add for cpu ctrl
+static ssize_t cpufreq_ctrl_show(struct gov_attr_set *attr_set, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "%d\n", nubia_cpufreq_ctrl_value);
+}
+
+static ssize_t cpufreq_ctrl_store(struct gov_attr_set *attr_set, const char *buf,
+                    size_t count)
+{
+    sscanf(buf, "%d", &nubia_cpufreq_ctrl_value);
+    return count;
+}
+//nubia end
 static ssize_t boost_show(struct gov_attr_set *attr_set, char *buf)
 {
 	struct waltgov_tunables *tunables = to_waltgov_tunables(attr_set);
@@ -770,7 +823,7 @@ int cpufreq_walt_set_adaptive_freq(unsigned int cpu, unsigned int adaptive_low_f
 
 	return -EINVAL;
 }
-EXPORT_SYMBOL(cpufreq_walt_set_adaptive_freq);
+EXPORT_SYMBOL_GPL(cpufreq_walt_set_adaptive_freq);
 
 /**
  * cpufreq_walt_get_adaptive_freq() - get the waltgov adaptive freq for cpu
@@ -799,7 +852,7 @@ int cpufreq_walt_get_adaptive_freq(unsigned int cpu, unsigned int *adaptive_low_
 
 	return -EINVAL;
 }
-EXPORT_SYMBOL(cpufreq_walt_get_adaptive_freq);
+EXPORT_SYMBOL_GPL(cpufreq_walt_get_adaptive_freq);
 
 /**
  * cpufreq_walt_reset_adaptive_freq() - reset the waltgov adaptive freq for cpu
@@ -822,7 +875,7 @@ int cpufreq_walt_reset_adaptive_freq(unsigned int cpu)
 
 	return 0;
 }
-EXPORT_SYMBOL(cpufreq_walt_reset_adaptive_freq);
+EXPORT_SYMBOL_GPL(cpufreq_walt_reset_adaptive_freq);
 
 #define WALTGOV_ATTR_RW(_name)						\
 static struct governor_attr _name =					\
@@ -881,6 +934,9 @@ static struct governor_attr hispeed_load = __ATTR_RW(hispeed_load);
 static struct governor_attr hispeed_freq = __ATTR_RW(hispeed_freq);
 static struct governor_attr rtg_boost_freq = __ATTR_RW(rtg_boost_freq);
 static struct governor_attr pl = __ATTR_RW(pl);
+//nubia add for cpu ctrl
+static struct governor_attr cpufreq_ctrl = __ATTR_RW(cpufreq_ctrl);
+//nubia end
 static struct governor_attr boost = __ATTR_RW(boost);
 WALTGOV_ATTR_RW(adaptive_low_freq);
 WALTGOV_ATTR_RW(adaptive_high_freq);
@@ -894,6 +950,9 @@ static struct attribute *waltgov_attrs[] = {
 	&hispeed_freq.attr,
 	&rtg_boost_freq.attr,
 	&pl.attr,
+    //nubia add for cpu ctrl
+    &cpufreq_ctrl.attr,
+    //nubia end
 	&boost.attr,
 	&adaptive_low_freq.attr,
 	&adaptive_high_freq.attr,

@@ -69,7 +69,7 @@ static int thermal_pause_hp_online(unsigned int online_cpu)
 	struct thermal_pause_cdev *thermal_pause_cdev;
 	int ret = 0;
 
-	pr_debug("online entry CPU:%d\n", online_cpu);
+	pr_info("online entry CPU:%d\n", online_cpu);
 
 	mutex_lock(&cpus_pause_lock);
 	list_for_each_entry(thermal_pause_cdev, &thermal_pause_cdev_list, node) {
@@ -79,7 +79,7 @@ static int thermal_pause_hp_online(unsigned int online_cpu)
 				   &thermal_pause_cdev->reg_work);
 	}
 	mutex_unlock(&cpus_pause_lock);
-	pr_debug("online exit CPU:%d\n", online_cpu);
+	pr_info("online exit CPU:%d\n", online_cpu);
 	return ret;
 }
 
@@ -100,7 +100,7 @@ static int thermal_pause_work(struct thermal_pause_cdev *thermal_pause_cdev)
 	cpumask_t cpus_to_pause, cpus_to_notify;
 
 	cpumask_copy(&cpus_to_pause, &thermal_pause_cdev->cpu_mask);
-	pr_debug("Pause:%*pbl\n", cpumask_pr_args(&thermal_pause_cdev->cpu_mask));
+	pr_info("Pause:%*pbl\n", cpumask_pr_args(&thermal_pause_cdev->cpu_mask));
 
 	mutex_unlock(&cpus_pause_lock);
 	ret = walt_pause_cpus(&cpus_to_pause, PAUSE_THERMAL);
@@ -147,7 +147,7 @@ static int thermal_resume_work(struct thermal_pause_cdev *thermal_pause_cdev)
 	struct thermal_pause_cdev *cdev;
 
 	cpumask_copy(&cpus_to_unpause, &thermal_pause_cdev->cpu_mask);
-	pr_debug("Unpause:%*pbl\n", cpumask_pr_args(&cpus_to_unpause));
+	pr_info("Unpause:%*pbl\n", cpumask_pr_args(&cpus_to_unpause));
 
 	mutex_unlock(&cpus_pause_lock);
 	ret = walt_resume_cpus(&cpus_to_unpause, PAUSE_THERMAL);
