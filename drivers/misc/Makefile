@@ -66,3 +66,4 @@ obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_QSEECOM_PROXY) 	+= qseecom_proxy.o
 obj-$(CONFIG_BOOTMARKER_PROXY) 	+= bootmarker_proxy.o
 obj-$(CONFIG_KINECTICS_XR_NORDIC) += kxrctrl/
+obj-$(CONFIG_AWINIC_HAPTIC_HV)	+= haptic_hv/
