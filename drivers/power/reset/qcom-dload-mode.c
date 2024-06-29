@@ -43,6 +43,14 @@ static bool enable_dump =
 	IS_ENABLED(CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE_DEFAULT);
 static enum qcom_download_mode current_download_mode = QCOM_DOWNLOAD_NODUMP;
 static enum qcom_download_mode dump_mode = QCOM_DOWNLOAD_FULLDUMP;
+#ifdef CONFIG_VENDOR_KERNEL_MODULE_PARAM
+extern bool is_kernel_log_driver_enabled(void);
+#else
+static bool is_kernel_log_driver_enabled(void)
+{
+	return false;
+}
+#endif
 
 static int set_download_mode(enum qcom_download_mode mode)
 {
@@ -338,6 +346,11 @@ static int qcom_dload_probe(struct platform_device *pdev)
 		pr_err("%s: Error in creation sysfs_create_group\n", __func__);
 		kobject_del(&poweroff->kobj);
 		return ret;
+	}
+
+	if (!is_kernel_log_driver_enabled()) {
+		pr_info("%s: disable dump and config hard reset\n", __func__);
+		enable_dump = 0;
 	}
 
 	poweroff->dload_dest_addr = map_prop_mem("qcom,msm-imem-dload-type");
