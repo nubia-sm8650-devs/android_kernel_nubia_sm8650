@@ -500,12 +500,14 @@ static int __init finalize_pkvm(void)
 		return 0;
 	}
 
+#ifdef CONFIG_MODULES
 	/*
 	 * Modules can play an essential part in the pKVM protection. All of
 	 * them must properly load to enable protected VMs.
 	 */
 	if (pkvm_load_early_modules())
 		pkvm_firmware_rmem_clear();
+#endif
 
 	/*
 	 * Exclude HYP sections from kmemleak so that they don't get peeked
