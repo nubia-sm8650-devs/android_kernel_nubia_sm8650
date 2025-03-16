@@ -325,6 +325,10 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	case GOODIX_GESTURE_DOUBLE_TAP:
 		if(cd->ztec.is_wakeup_gesture){
 			/* do resume routine */
+			input_report_key(cd->input_dev, KEY_WAKEUP, 1);
+			input_sync(cd->input_dev);
+			input_report_key(cd->input_dev, KEY_WAKEUP, 0);
+			input_sync(cd->input_dev);
 #ifdef CONFIG_TOUCHSCREEN_UFP_MAC
 			ts_info("enter:double_gesture");
 			ufp_report_gesture_uevent(DOUBLE_TAP_GESTURE);
