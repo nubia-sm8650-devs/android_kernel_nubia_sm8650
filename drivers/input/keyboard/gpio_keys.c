@@ -693,7 +693,7 @@ static void gpio_keys_report_state(struct gpio_keys_drvdata *ddata)
 
 	for (i = 0; i < ddata->pdata->nbuttons; i++) {
 		struct gpio_button_data *bdata = &ddata->data[i];
-		if (bdata->gpiod)
+		if (bdata->gpiod && !bdata->button->oneshot)
 			gpio_keys_gpio_report_event(bdata);
 	}
 	input_sync(input);
