@@ -34,7 +34,6 @@ struct gpio_keys_button {
 	bool can_disable;
 	int value;
 	unsigned int irq;
-	bool oneshot;
 };
 
 /**
