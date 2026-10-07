@@ -496,6 +496,12 @@ void input_set_abs_params(struct input_dev *dev, unsigned int axis,
 {
 	struct input_absinfo *absinfo;
 
+	if (axis > input_max_code[EV_ABS]) {
+		pr_err("%s: invalid axis %u\n", __func__, axis);
+		dump_stack();
+		return;
+	}
+
 	__set_bit(EV_ABS, dev->evbit);
 	__set_bit(axis, dev->absbit);
 
